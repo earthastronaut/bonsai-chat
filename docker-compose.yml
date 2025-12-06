@@ -1,0 +1,49 @@
+# Local development setup
+# Run: docker compose up
+
+services:
+  # Open WebUI - The chat interface
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    ports:
+      - "3000:8080"
+    environment:
+      # Point to your Modal backend (update after deploying)
+      - OPENAI_API_BASE_URL=https://YOUR_MODAL_USERNAME--llm-backend-api.modal.run/v1
+      - OPENAI_API_KEY=your-api-key  # Match what you set in Modal
+      
+      # Or use local Ollama for development:
+      # - OLLAMA_BASE_URL=http://ollama:11434
+      
+      # Auth settings
+      - WEBUI_AUTH=true
+      - WEBUI_NAME=My LLM Studio
+      
+      # First user becomes admin
+      - ENABLE_SIGNUP=true
+    volumes:
+      - open-webui-data:/app/backend/data
+    restart: unless-stopped
+
+  # Optional: Local Ollama for development (no GPU cloud costs)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    # Uncomment for GPU support:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+volumes:
+  open-webui-data:
+  ollama-data:
+

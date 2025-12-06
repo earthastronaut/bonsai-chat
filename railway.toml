@@ -1,0 +1,17 @@
+# Railway deployment for Open WebUI
+# Deploy: Connect this repo to Railway and it will auto-deploy
+
+[build]
+# Use pre-built Open WebUI image
+dockerImage = "ghcr.io/open-webui/open-webui:main"
+
+[deploy]
+# Container listens on port 8080
+startCommand = ""
+healthcheckPath = "/"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+
+# Railway will set PORT automatically, Open WebUI uses 8080
+

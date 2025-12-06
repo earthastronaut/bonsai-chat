@@ -1,0 +1,8 @@
+# Local development / Modal deployment
+modal>=0.64.0
+
+# Only needed if running locally (not on Modal)
+# vllm>=0.6.0
+# torch
+# transformers
+

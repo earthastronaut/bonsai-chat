@@ -1,0 +1,168 @@
+# Cloud LLM Chat Interface
+
+A self-hosted LM Studio-like chat interface with scale-to-zero GPU backend.
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        Your Setup                           │
+│                                                             │
+│  ┌──────────────────┐         ┌─────────────────────────┐  │
+│  │   Open WebUI     │────────▶│   GPU Backend (Modal)   │  │
+│  │   (Railway)      │         │                         │  │
+│  │                  │   API   │ • vLLM + Mistral-7B     │  │
+│  │ • Chat interface │ ◀────── │ • Scales to zero        │  │
+│  │ • Authentication │         │ • 2 min idle timeout    │  │
+│  │ • Chat history   │         │                         │  │
+│  │ • Model selector │         │ Cold start: ~30-60 sec  │  │
+│  │                  │         │ Cost: ~$1/hr when used  │  │
+│  │ Cost: ~$5/month  │         │                         │  │
+│  └──────────────────┘         └─────────────────────────┘  │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Quick Start
+
+### 1. Deploy GPU Backend (Modal)
+
+```bash
+# Install Modal CLI
+pip install modal
+modal setup  # One-time auth
+
+# Create API key secret (optional, for auth)
+modal secret create api-auth API_KEY=your-secret-key
+
+# Deploy
+modal deploy modal_backend.py
+```
+
+Note your endpoint URL: `https://YOUR_USERNAME--llm-backend-api.modal.run`
+
+### 2. Deploy Chat Interface (Railway)
+
+#### Option A: One-Click Deploy
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/open-webui)
+
+#### Option B: From This Repo
+
+1. Go to [railway.app](https://railway.app) → New Project → Deploy from GitHub
+2. Select this repository
+3. Add a **Volume** mounted to `/app/backend/data` (for chat history)
+4. Set environment variables:
+
+```env
+OPENAI_API_BASE_URL=https://YOUR_USERNAME--llm-backend-api.modal.run/v1
+OPENAI_API_KEY=your-api-key
+WEBUI_AUTH=true
+WEBUI_NAME=LLM Studio
+ENABLE_SIGNUP=false
+PORT=8080
+```
+
+5. Deploy! First user to sign up becomes admin.
+
+### 3. Use It
+
+1. Open your Railway URL
+2. Create an account (first user = admin)
+3. Start chatting — the GPU backend wakes up on first message (~30-60s cold start)
+
+## Authentication & User Management
+
+### How Open WebUI Handles Auth
+
+Open WebUI supports multiple authentication methods:
+
+1. **Local Auth (Default)**: Email/password signup
+   - First user automatically becomes **super admin**
+   - Subsequent users are regular users
+   - Admin can promote users to admin role
+
+2. **OAuth/SSO**: Integrate with Google, Microsoft, GitHub, or any OIDC provider
+   - Set `ENABLE_OAUTH_ROLE_MANAGEMENT=true` for role sync
+   - See [Open WebUI SSO docs](https://docs.openwebui.com/features/sso)
+
+3. **Trusted Header Auth**: For reverse proxy setups (Authelia, Authentik)
+
+### Restrict to Specific Users
+
+**Option 1: Disable Signups (Recommended)**
+
+Set in Railway environment variables:
+
+```env
+ENABLE_SIGNUP=false
+```
+
+Then manually create users:
+1. Log in as admin (first user)
+2. Go to **Settings → Users**
+3. Click **Add User** → Enter email/password
+4. Assign role (user/admin)
+
+**Option 2: OAuth with Domain Restriction**
+
+Use OAuth (Google Workspace, Microsoft 365) and restrict by email domain in your identity provider.
+
+**Option 3: Admin Approval**
+
+Keep `ENABLE_SIGNUP=true` but:
+1. Admin must approve new users
+2. Or disable signups after initial setup
+
+### Role-Based Access Control
+
+- **Super Admin**: First user, cannot be demoted
+- **Admin**: Can manage users, settings, models
+- **User**: Can chat, manage own conversations
+
+Admins can change user roles in **Settings → Users**.
+
+## Local Development
+
+```bash
+# Run Open WebUI locally
+docker compose up
+
+# Access at http://localhost:3000
+```
+
+## Files
+
+| File | Purpose |
+|------|---------|
+| `modal_backend.py` | GPU inference backend (Modal) |
+| `Dockerfile` | Railway deployment config |
+| `railway.toml` | Railway service settings |
+| `docker-compose.yml` | Local development |
+
+## Cost Breakdown
+
+| Component | Cost | Notes |
+|-----------|------|-------|
+| Railway (Open WebUI) | ~$5/month | Always on, cheap container |
+| Modal (GPU) | ~$0.50-1/hr | Only when chatting, scales to zero |
+
+**Typical usage**: If you chat for 2 hours/day, GPU costs ~$30-60/month.
+
+## Customization
+
+### Change the Model
+
+Edit `modal_backend.py`:
+
+```python
+MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.3"  # Change this
+GPU_TYPE = "A10G"  # T4 is cheaper, A100 is faster
+```
+
+### Adjust Scale-to-Zero Timeout
+
+```python
+CONTAINER_IDLE_TIMEOUT = 120  # Seconds before GPU shuts down
+```
+
+Lower = saves money, but more cold starts.
