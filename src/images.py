@@ -20,16 +20,18 @@ vllm_image = (
         "huggingface_hub",
         "hf_transfer",
     )
-    .env({"HF_HUB_ENABLE_HF_TRANSFER": "1"})
+    .env({
+        "HF_HUB_ENABLE_HF_TRANSFER": "1",
+        "PYTHONPATH": "/pkg"
+    })
     .add_local_dir("src", remote_path="/pkg/src")
-    .env({"PYTHONPATH": "/pkg"})
 )
 
 # FastAPI image for API endpoints
 api_image = (
     modal.Image.debian_slim()
     .pip_install("fastapi", "pydantic")
-    .add_local_dir("src", remote_path="/pkg/src")
     .env({"PYTHONPATH": "/pkg"})
+    .add_local_dir("src", remote_path="/pkg/src")
 )
 
