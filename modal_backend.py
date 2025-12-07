@@ -217,7 +217,9 @@ class {class_name}:
 @asgi_app()
 def api():
     """OpenAI-compatible API endpoint."""
-    logger.debug(f"Available models: {json.dumps(MODEL_REGISTRY, indent=2)}")
+    # Log available model IDs (MODEL_REGISTRY contains Modal classes which aren't JSON serializable)
+    available_models = list(MODEL_REGISTRY.keys())
+    logger.debug(f"Available models: {json.dumps(available_models, indent=2)}")
     return create_app(MODEL_REGISTRY)
 
 
