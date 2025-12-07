@@ -30,6 +30,7 @@ vllm_image = (
         "transformers",
         "torch",
         "huggingface_hub",
+        "hf_transfer",
     )
     .env({"HF_HUB_ENABLE_HF_TRANSFER": "1"})
 )
