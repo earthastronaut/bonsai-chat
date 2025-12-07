@@ -108,6 +108,7 @@ setup-info:
 
 # Deploy to Modal
 deploy: check-auth
+	git push origin main
 	@echo "🚀 Deploying to Modal..."
 	@if command -v modal &> /dev/null; then \
 		modal deploy modal_backend.py; \
