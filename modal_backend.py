@@ -3,6 +3,9 @@ Modal GPU Backend for LLM Inference
 Scales to zero when not in use, wakes up on request.
 
 Deploy: modal deploy modal_backend.py
+
+Note: The src/ directory is explicitly included in the Modal images via add_local_dir,
+so all modules in src/ will be packaged and available at runtime.
 """
 
 import modal
