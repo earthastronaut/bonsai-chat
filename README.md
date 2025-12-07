@@ -130,6 +130,51 @@ docker compose up
 # Access at http://localhost:3000
 ```
 
+## CI/CD Deployment
+
+This repository includes a GitHub Actions workflow that automatically deploys to Modal when changes are pushed to the `main` branch.
+
+### Setting Up GitHub Actions Secrets
+
+To enable automatic deployment, you need to configure Modal authentication secrets in your GitHub repository:
+
+1. **Get your Modal token credentials:**
+   - Go to [Modal Tokens](https://modal.com/tokens) (or run `modal token new` locally)
+   - Create a new token or use an existing one
+   - You'll need both the **Token ID** and **Token Secret**
+
+2. **Add secrets to GitHub:**
+   - Go to your repository on GitHub
+   - Navigate to **Settings** → **Secrets and variables** → **Actions**
+   - Click **New repository secret**
+   - Add the following secrets:
+     - **Name:** `MODAL_TOKEN_ID`
+       - **Value:** Your Modal token ID
+     - **Name:** `MODAL_TOKEN_SECRET`
+       - **Value:** Your Modal token secret
+
+3. **Verify deployment:**
+   - Push a change to the `main` branch
+   - Check the **Actions** tab in your GitHub repository
+   - The workflow will automatically deploy `modal_backend.py` to Modal
+
+**Note:** You can also manually trigger the deployment by going to **Actions** → **Deploy to Modal** → **Run workflow**.
+
+### Manual Deployment
+
+If you prefer to deploy manually or the workflow fails:
+
+```bash
+# Install Modal CLI
+pip install modal
+
+# Authenticate (one-time setup)
+modal setup
+
+# Deploy
+modal deploy modal_backend.py
+```
+
 ## Files
 
 | File | Purpose |
