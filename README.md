@@ -36,7 +36,7 @@ modal setup  # One-time auth
 modal secret create api-auth API_KEY=your-secret-key
 
 # Deploy
-modal deploy modal_backend.py
+modal deploy -m src.app
 ```
 
 Note your endpoint URL: `https://YOUR_USERNAME--llm-backend-api.modal.run`
@@ -156,7 +156,7 @@ To enable automatic deployment, you need to configure Modal authentication secre
 3. **Verify deployment:**
    - Push a change to the `main` branch
    - Check the **Actions** tab in your GitHub repository
-   - The workflow will automatically deploy `modal_backend.py` to Modal
+   - The workflow will automatically deploy `src.app` to Modal
 
 **Note:** You can also manually trigger the deployment by going to **Actions** → **Deploy to Modal** → **Run workflow**.
 
@@ -172,14 +172,14 @@ pip install modal
 modal setup
 
 # Deploy
-modal deploy modal_backend.py
+modal deploy -m src.app
 ```
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `modal_backend.py` | GPU inference backend (Modal) |
+| `src/app.py` | GPU inference backend (Modal) |
 | `Dockerfile` | Railway deployment config |
 | `railway.toml` | Railway service settings |
 | `docker-compose.yml` | Local development |
@@ -197,14 +197,24 @@ modal deploy modal_backend.py
 
 ### Change the Model
 
-Edit `modal_backend.py`:
+Edit `src/config.py` to modify the model registry:
 
 ```python
-MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.3"  # Change this
-GPU_TYPE = "A10G"  # T4 is cheaper, A100 is faster
+MODEL_REGISTRY: ModelRegistry = ModelRegistry(
+    models={
+        "mistralai/Mistral-7B-Instruct-v0.3": ModelConfig(
+            model_id="mistralai/Mistral-7B-Instruct-v0.3",
+            gpu_type="A10G",  # T4 is cheaper, A100 is faster
+            max_model_len=4096,
+        ),
+        # Add more models here...
+    },
+)
 ```
 
 ### Adjust Scale-to-Zero Timeout
+
+Edit `src/config.py`:
 
 ```python
 CONTAINER_IDLE_TIMEOUT = 120  # Seconds before GPU shuts down

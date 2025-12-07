@@ -74,7 +74,7 @@ setup-info:
 	@echo ""
 	@echo "3. Deploy the GPU backend:"
 	@echo "   make deploy"
-	@echo "   or: modal deploy modal_backend.py"
+	@echo "   or: modal deploy -m src.app"
 	@echo ""
 	@echo "4. After deploy, you'll get a URL like:"
 	@echo "   https://YOUR_USERNAME--llm-backend-api.modal.run"
@@ -103,7 +103,7 @@ setup-info:
 	@echo "💡 Tips:"
 	@echo "   • The GPU scales to zero after 2 min idle (saves $$$)"
 	@echo "   • First request after idle takes ~30-60 sec (cold start)"
-	@echo "   • Change MODEL_ID in modal_backend.py for different models"
+	@echo "   • Change models in src/config.py for different models"
 	@echo ""
 
 # Deploy to Modal
@@ -111,9 +111,9 @@ deploy: check-auth
 	git push origin main
 	@echo "🚀 Deploying to Modal..."
 	@if command -v modal &> /dev/null; then \
-		modal deploy modal_backend.py; \
+		modal deploy -m src.app; \
 	else \
-		$(PYTHON) -m modal deploy modal_backend.py; \
+		$(PYTHON) -m modal deploy -m src.app; \
 	fi
 
 # Run local development

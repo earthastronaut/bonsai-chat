@@ -2,10 +2,7 @@
 Modal GPU Backend for LLM Inference
 Scales to zero when not in use, wakes up on request.
 
-Deploy: modal deploy modal_backend.py
-
-Note: The src/ directory is explicitly included in the Modal images via add_local_dir,
-so all modules in src/ will be packaged and available at runtime.
+Deploy: modal deploy -m src.app
 """
 
 import json
@@ -14,9 +11,9 @@ from modal import asgi_app  # type: ignore
 import logging
 import traceback
 
-from src.config import APP_NAME, MAX_CONTAINERS, LOG_LEVEL, MODEL_REGISTRY as MODEL_CONFIG
-from src.images import api_image, vllm_image
-from src.api import create_app
+from .config import APP_NAME, MAX_CONTAINERS, LOG_LEVEL, MODEL_REGISTRY as MODEL_CONFIG
+from .images import api_image, vllm_image
+from .api import create_app
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -185,17 +182,28 @@ class BaseModel:
         return formatted
 
 
-# Create a Modal class for each model
-# Each model gets its own container that scales independently
-# NOTE: Classes must be defined at module level for Modal to see @modal.method() decorators
-MODEL_REGISTRY = {}
+# ---------------------------------------------------------------------------
+# Model Registration
+# ---------------------------------------------------------------------------
 
-for model_id, model_config in MODEL_CONFIG.models.items():
-    # Create a unique class name for this model
+def register_model(model_id: str, model_config) -> type:
+    """
+    Register a model with Modal by creating a configured Modal class.
+    
+    Each model gets its own Modal class with its own container that scales independently.
+    The class is created at module level so Modal can properly register @modal.method() decorators.
+    
+    Args:
+        model_id: The model identifier (e.g., "mistralai/Mistral-7B-Instruct-v0.3")
+        model_config: ModelConfig instance with model-specific settings
+        
+    Returns:
+        A Modal class decorated with app.cls() and configured for the specific model
+    """
+    # Create a clean class name from model_id
     class_name = f"Model_{model_id.replace('/', '_').replace('-', '_').replace('.', '_')}"
     
     # Create a subclass of BaseModel with model-specific configuration
-    # This is done at module level, so Modal can see the decorators
     ModelClass = type(
         class_name,
         (BaseModel,),
@@ -211,6 +219,7 @@ for model_id, model_config in MODEL_CONFIG.models.items():
     )
     
     # Apply Modal decorator with model-specific settings
+    # This creates a Modal class that will run in its own container
     ModalModel = app.cls(
         gpu=model_config.gpu_type,
         image=vllm_image,
@@ -219,11 +228,20 @@ for model_id, model_config in MODEL_CONFIG.models.items():
         max_containers=model_config.max_containers,
     )(ModelClass)
     
-    # Add to module namespace so Modal can import it
+    # Add to module namespace so Modal can discover the class
+    # This is required for Modal to properly register @modal.method() decorators
+    # at module import time
     globals()[class_name] = ModalModel
     
-    # Store in registry for routing
-    MODEL_REGISTRY[model_id] = ModalModel
+    return ModalModel
+
+
+# Register all models from configuration
+# Each model gets its own container that scales independently
+MODEL_REGISTRY: dict[str, type] = {
+    model_id: register_model(model_id, model_config)
+    for model_id, model_config in MODEL_CONFIG.models.items()
+}
 
 # ---------------------------------------------------------------------------
 # OpenAI-Compatible API (for Open WebUI)
@@ -261,3 +279,4 @@ def main():
     ]
     result = model.chat.remote(messages)
     print("Response:", result["choices"][0]["message"]["content"])
+

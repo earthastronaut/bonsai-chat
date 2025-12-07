@@ -75,9 +75,6 @@ MODEL_REGISTRY: ModelRegistry = ModelRegistry(
     },
 )
 
-# Legacy GPU config (for backward compatibility)
-GPU_TYPE = "A10G"
-
 # API Configuration
 APP_NAME = "llm-backend"
 
