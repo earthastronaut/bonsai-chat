@@ -262,4 +262,3 @@ def main():
     ]
     result = model.chat.remote(messages)
     print("Response:", result["choices"][0]["message"]["content"])
-
