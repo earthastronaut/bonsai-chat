@@ -43,9 +43,9 @@ app = modal.App("llm-backend")
 @app.cls(
     gpu=GPU_TYPE,
     image=vllm_image,
-    container_idle_timeout=CONTAINER_IDLE_TIMEOUT,
-    allow_concurrent_inputs=100,
-    secrets=[modal.Secret.from_name("huggingface", required_hint=False)],
+    scaledown_window=CONTAINER_IDLE_TIMEOUT,
+    # secrets=[modal.Secret.from_name("huggingface")],  # Optional: only needed for private/gated models
+    max_containers=100,
 )
 class Model:
     """vLLM model server that scales to zero."""
@@ -122,129 +122,128 @@ class Model:
 # ---------------------------------------------------------------------------
 
 from modal import asgi_app
-from fastapi import FastAPI, HTTPException, Header
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 import time
 import uuid
-
-web_app = FastAPI(title="LLM API")
-
-web_app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Simple API key auth - set via: modal secret create api-auth API_KEY=your-secret-key
-API_KEY = None
-
-class ChatMessage(BaseModel):
-    role: str
-    content: str
-
-class ChatRequest(BaseModel):
-    model: str = MODEL_ID
-    messages: list[ChatMessage]
-    max_tokens: int = 1024
-    temperature: float = 0.7
-    stream: bool = False
-
-class CompletionRequest(BaseModel):
-    model: str = MODEL_ID
-    prompt: str
-    max_tokens: int = 1024
-    temperature: float = 0.7
-
-@web_app.get("/v1/models")
-async def list_models():
-    """List available models (OpenAI compatible)."""
-    return {
-        "object": "list",
-        "data": [{
-            "id": MODEL_ID,
-            "object": "model",
-            "created": int(time.time()),
-            "owned_by": "local",
-        }]
-    }
-
-@web_app.post("/v1/chat/completions")
-async def chat_completions(request: ChatRequest, authorization: str = Header(None)):
-    """Chat completions endpoint (OpenAI compatible)."""
-    # Auth check
-    if API_KEY and authorization != f"Bearer {API_KEY}":
-        raise HTTPException(status_code=401, detail="Invalid API key")
-    
-    if request.stream:
-        # Streaming not implemented in this example
-        raise HTTPException(status_code=400, detail="Streaming not supported yet")
-    
-    model = Model()
-    messages = [{"role": m.role, "content": m.content} for m in request.messages]
-    
-    result = model.chat.remote(
-        messages=messages,
-        max_tokens=request.max_tokens,
-        temperature=request.temperature,
-    )
-    
-    return {
-        "id": f"chatcmpl-{uuid.uuid4().hex[:8]}",
-        "object": "chat.completion",
-        "created": int(time.time()),
-        "model": request.model,
-        "choices": result["choices"],
-        "usage": {
-            "prompt_tokens": -1,  # vLLM can provide this
-            "completion_tokens": -1,
-            "total_tokens": -1,
-        }
-    }
-
-@web_app.post("/v1/completions")
-async def completions(request: CompletionRequest, authorization: str = Header(None)):
-    """Text completions endpoint (OpenAI compatible)."""
-    if API_KEY and authorization != f"Bearer {API_KEY}":
-        raise HTTPException(status_code=401, detail="Invalid API key")
-    
-    model = Model()
-    text = model.generate.remote(
-        prompt=request.prompt,
-        max_tokens=request.max_tokens,
-        temperature=request.temperature,
-    )
-    
-    return {
-        "id": f"cmpl-{uuid.uuid4().hex[:8]}",
-        "object": "text_completion",
-        "created": int(time.time()),
-        "model": request.model,
-        "choices": [{
-            "text": text,
-            "index": 0,
-            "finish_reason": "stop",
-        }]
-    }
-
-@web_app.get("/health")
-async def health():
-    return {"status": "ok"}
 
 
 @app.function(
     image=modal.Image.debian_slim().pip_install("fastapi", "pydantic"),
-    secrets=[modal.Secret.from_name("api-auth", required_hint=False)],
-    allow_concurrent_inputs=100,
+    secrets=[modal.Secret.from_name("api-auth")],
+    max_containers=100,
 )
 @asgi_app()
 def api():
     """OpenAI-compatible API endpoint."""
+    from fastapi import FastAPI, HTTPException, Header
+    from fastapi.middleware.cors import CORSMiddleware
+    from pydantic import BaseModel
     import os
-    global API_KEY
+    
+    web_app = FastAPI(title="LLM API")
+    
+    web_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    
+    # Simple API key auth - set via: modal secret create api-auth API_KEY=your-secret-key
     API_KEY = os.environ.get("API_KEY")
+    
+    class ChatMessage(BaseModel):
+        role: str
+        content: str
+    
+    class ChatRequest(BaseModel):
+        model: str = MODEL_ID
+        messages: list[ChatMessage]
+        max_tokens: int = 1024
+        temperature: float = 0.7
+        stream: bool = False
+    
+    class CompletionRequest(BaseModel):
+        model: str = MODEL_ID
+        prompt: str
+        max_tokens: int = 1024
+        temperature: float = 0.7
+    
+    @web_app.get("/v1/models")
+    async def list_models():
+        """List available models (OpenAI compatible)."""
+        return {
+            "object": "list",
+            "data": [{
+                "id": MODEL_ID,
+                "object": "model",
+                "created": int(time.time()),
+                "owned_by": "local",
+            }]
+        }
+    
+    @web_app.post("/v1/chat/completions")
+    async def chat_completions(request: ChatRequest, authorization: str = Header(None)):
+        """Chat completions endpoint (OpenAI compatible)."""
+        # Auth check
+        if API_KEY and authorization != f"Bearer {API_KEY}":
+            raise HTTPException(status_code=401, detail="Invalid API key")
+        
+        if request.stream:
+            # Streaming not implemented in this example
+            raise HTTPException(status_code=400, detail="Streaming not supported yet")
+        
+        model = Model()
+        messages = [{"role": m.role, "content": m.content} for m in request.messages]
+        
+        result = model.chat.remote(
+            messages=messages,
+            max_tokens=request.max_tokens,
+            temperature=request.temperature,
+        )
+        
+        return {
+            "id": f"chatcmpl-{uuid.uuid4().hex[:8]}",
+            "object": "chat.completion",
+            "created": int(time.time()),
+            "model": request.model,
+            "choices": result["choices"],
+            "usage": {
+                "prompt_tokens": -1,  # vLLM can provide this
+                "completion_tokens": -1,
+                "total_tokens": -1,
+            }
+        }
+    
+    @web_app.post("/v1/completions")
+    async def completions(request: CompletionRequest, authorization: str = Header(None)):
+        """Text completions endpoint (OpenAI compatible)."""
+        if API_KEY and authorization != f"Bearer {API_KEY}":
+            raise HTTPException(status_code=401, detail="Invalid API key")
+        
+        model = Model()
+        text = model.generate.remote(
+            prompt=request.prompt,
+            max_tokens=request.max_tokens,
+            temperature=request.temperature,
+        )
+        
+        return {
+            "id": f"cmpl-{uuid.uuid4().hex[:8]}",
+            "object": "text_completion",
+            "created": int(time.time()),
+            "model": request.model,
+            "choices": [{
+                "text": text,
+                "index": 0,
+                "finish_reason": "stop",
+            }]
+        }
+    
+    @web_app.get("/health")
+    async def health():
+        return {"status": "ok"}
+    
     return web_app
 
 
