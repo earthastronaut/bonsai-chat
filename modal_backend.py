@@ -8,13 +8,22 @@ Note: The src/ directory is explicitly included in the Modal images via add_loca
 so all modules in src/ will be packaged and available at runtime.
 """
 
-import modal
-from modal import asgi_app
+import json
+import modal  # type: ignore
+from modal import asgi_app  # type: ignore
+import logging
 
-from src.config import APP_NAME, MAX_CONTAINERS, AVAILABLE_MODELS, DEFAULT_MODEL_ID
+from src.config import APP_NAME, MAX_CONTAINERS, LOG_LEVEL, AVAILABLE_MODELS, DEFAULT_MODEL_ID
 from src.images import api_image, vllm_image
 from src.model import create_model_class
 from src.api import create_app
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=LOG_LEVEL,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
 
 # ---------------------------------------------------------------------------
 # Application
@@ -54,6 +63,7 @@ for model_id, model_config in AVAILABLE_MODELS.items():
 @asgi_app()
 def api():
     """OpenAI-compatible API endpoint."""
+    logger.debug(f"Available models: {json.dumps(MODEL_REGISTRY, indent=2)}")
     return create_app(MODEL_REGISTRY)
 
 
