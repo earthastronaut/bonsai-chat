@@ -12,7 +12,7 @@ ENV WEBUI_NAME="LLM Studio"
 ENV ENABLE_SIGNUP=true
 
 # Data persistence (attach Railway volume to /app/backend/data)
-VOLUME ["/app/backend/data"]
+# VOLUME ["/app/backend/data"]
 
 EXPOSE 8080
 
