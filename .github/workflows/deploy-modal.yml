@@ -9,7 +9,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: bonsai-chat
+    environment: bonsai-chat-prod
     
     steps:
       - name: Checkout code
