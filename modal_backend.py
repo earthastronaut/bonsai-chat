@@ -219,6 +219,9 @@ for model_id, model_config in MODEL_CONFIG.models.items():
         max_containers=model_config.max_containers,
     )(ModelClass)
     
+    # Add to module namespace so Modal can import it
+    globals()[class_name] = ModalModel
+    
     # Store in registry for routing
     MODEL_REGISTRY[model_id] = ModalModel
 
