@@ -11,9 +11,9 @@ so all modules in src/ will be packaged and available at runtime.
 import modal
 from modal import asgi_app
 
-from src.config import APP_NAME, MAX_CONTAINERS
-from src.images import api_image
-from src.model import create_model_class
+from src.config import APP_NAME, MAX_CONTAINERS, GPU_TYPE, CONTAINER_IDLE_TIMEOUT
+from src.images import api_image, vllm_image
+from src.model import Model
 from src.api import create_app
 
 # ---------------------------------------------------------------------------
@@ -22,8 +22,14 @@ from src.api import create_app
 
 app = modal.App(APP_NAME)
 
-# Create Model class
-Model = create_model_class(app)
+# Apply Modal decorator to Model class
+Model = app.cls(
+    gpu=GPU_TYPE,
+    image=vllm_image,
+    scaledown_window=CONTAINER_IDLE_TIMEOUT,
+    # secrets=[modal.Secret.from_name("huggingface")],  # Optional: only needed for private/gated models
+    max_containers=MAX_CONTAINERS,
+)(Model)
 
 # ---------------------------------------------------------------------------
 # OpenAI-Compatible API (for Open WebUI)
