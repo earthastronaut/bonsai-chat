@@ -3,6 +3,7 @@ Model class for vLLM inference.
 """
 
 import modal
+import traceback
 from .config import MODEL_ID, MAX_MODEL_LEN
 
 
@@ -66,33 +67,68 @@ class Model:
     def chat_stream(self, messages: list[dict], max_tokens: int = 1024, temperature: float = 0.7):
         """Stream chat completion (OpenAI format). Returns list of text deltas."""
         from vllm import SamplingParams
-
-        # Format messages for the model
-        prompt = self._format_messages(messages)
+        import logging
         
-        sampling = SamplingParams(
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+        logger = logging.getLogger("llm-api")
         
-        # Use streaming generation - vLLM yields RequestOutput objects incrementally
-        stream = self.llm.generate([prompt], sampling, use_tqdm=False)
-        
-        # Collect text deltas as they're generated
-        chunks = []
-        previous_text = ""
-        for output in stream:
-            # Each output contains the full text so far, extract the delta
-            for choice in output.outputs:
-                current_text = choice.text
-                # Calculate delta (new text since last chunk)
-                if len(current_text) > len(previous_text):
-                    delta = current_text[len(previous_text):]
-                    if delta:
-                        chunks.append(delta)
-                        previous_text = current_text
-        
-        return chunks
+        try:
+            # Validate input
+            if not messages or not isinstance(messages, list):
+                raise ValueError("messages must be a non-empty list")
+            
+            # Format messages for the model
+            prompt = self._format_messages(messages)
+            logger.debug(f"chat_stream: Formatted prompt length: {len(prompt)}")
+            
+            if not prompt or not prompt.strip():
+                raise ValueError("Formatted prompt is empty")
+            
+            sampling = SamplingParams(
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            
+            # vLLM's LLM.generate() returns a list, not a generator
+            # We need to use the request_id to track streaming
+            # For now, we'll generate and simulate streaming by chunking the output
+            logger.debug("chat_stream: Starting vLLM generation")
+            
+            # Use generate which returns RequestOutput objects
+            # The outputs list contains the final result
+            request_outputs = self.llm.generate([prompt], sampling, use_tqdm=False)
+            
+            if not request_outputs:
+                raise ValueError("vLLM returned empty outputs")
+            
+            request_output = request_outputs[0]
+            if not hasattr(request_output, 'outputs') or not request_output.outputs:
+                raise ValueError("RequestOutput has no outputs")
+            
+            # Get the final generated text
+            final_text = request_output.outputs[0].text
+            
+            # Simulate streaming by chunking the text into smaller pieces
+            # This is a workaround since vLLM's synchronous LLM doesn't support true streaming
+            # For true streaming, we'd need to use AsyncLLMEngine (which requires async methods)
+            chunk_size = 10  # Characters per chunk
+            chunks = []
+            for i in range(0, len(final_text), chunk_size):
+                chunk = final_text[i:i + chunk_size]
+                if chunk:
+                    chunks.append(chunk)
+            
+            # If text is very short, return it as a single chunk
+            if not chunks and final_text:
+                chunks = [final_text]
+            
+            logger.debug(f"chat_stream: Generated {len(chunks)} chunks from text of length {len(final_text)}")
+            
+            return chunks
+            
+        except Exception as e:
+            logger.error(f"chat_stream: Error in chat_stream method: {str(e)}")
+            logger.error(f"chat_stream: Traceback: {traceback.format_exc()}")
+            raise
 
     def _format_messages(self, messages: list[dict]) -> str:
         """Format chat messages for Mistral-style models."""
