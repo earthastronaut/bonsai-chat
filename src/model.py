@@ -2,7 +2,7 @@
 Model class for vLLM inference.
 """
 
-import modal
+import modal  # type: ignore
 import traceback
 from .config import MODEL_REGISTRY
 
@@ -26,7 +26,7 @@ def create_model_class(model_id: str):
         @modal.enter()
         def load_model(self):
             """Load model once when container starts (cached across requests)."""
-            from vllm import LLM, SamplingParams
+            from vllm import LLM, SamplingParams  # type: ignore
 
             print(f"Loading model: {self._model_id}")
             print(f"Config: GPU={self._model_config.gpu_type}, MaxLen={self._model_config.max_model_len}")

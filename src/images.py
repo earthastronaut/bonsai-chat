@@ -2,7 +2,7 @@
 Container image definitions for Modal.
 """
 
-import modal
+import modal  # type: ignore
 from pathlib import Path
 
 # Get the src directory path
@@ -22,7 +22,8 @@ vllm_image = (
     )
     .env({
         "HF_HUB_ENABLE_HF_TRANSFER": "1",
-        "PYTHONPATH": "/pkg"
+        "PYTHONPATH": "/pkg",
+        "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",  # Reduce memory fragmentation
     })
     .add_local_dir("src", remote_path="/pkg/src")
 )

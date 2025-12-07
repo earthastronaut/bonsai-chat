@@ -21,6 +21,9 @@ class ModelConfig(BaseModel):
     container_idle_timeout: int = (
         CONTAINER_IDLE_TIMEOUT  # Scale to zero after N seconds idle
     )
+    quantization: str | None = None  # Options: "awq", "gptq", "fp8", None
+    gpu_memory_utilization: float = 0.9  # Fraction of GPU memory to use (0.0-1.0)
+    enforce_eager: bool = False  # Disable CUDA graphs to save memory
 
 
 class ModelRegistry(BaseModel):
@@ -47,6 +50,16 @@ MODEL_REGISTRY: ModelRegistry = ModelRegistry(
             gpu_type="A10G",  # Medium model can use A10G
             max_model_len=4096,
         ),
+        "Qwen/Qwen3-1.7B": ModelConfig(
+            model_id="Qwen/Qwen3-1.7B",
+            gpu_type="T4",  # Small model can use T4
+            max_model_len=4096,
+        ),
+        "Qwen/Qwen3-4B-Thinking-2507": ModelConfig(
+            model_id="Qwen/Qwen3-4B-Thinking-2507",
+            gpu_type="T4",  # Small-medium model can use T4
+            max_model_len=4096,
+        ),
         "mistralai/Mistral-7B-Instruct-v0.3": ModelConfig(
             model_id="mistralai/Mistral-7B-Instruct-v0.3",
             gpu_type="A10G",  # Small model can use A10G
@@ -54,8 +67,10 @@ MODEL_REGISTRY: ModelRegistry = ModelRegistry(
         ),
         "mistralai/Mistral-Nemo-Base-2407": ModelConfig(
             model_id="mistralai/Mistral-Nemo-Base-2407",
-            gpu_type="A10G",  # Small model can use A10G
+            gpu_type="A100-40GB",  # Large model needs A100, or use quantization
             max_model_len=4096,
+            gpu_memory_utilization=0.85,  # Reduce memory usage to avoid OOM
+            enforce_eager=True,  # Disable CUDA graphs to save memory
         ),
     },
 )

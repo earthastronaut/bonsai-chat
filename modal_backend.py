@@ -36,44 +36,42 @@ app = modal.App(APP_NAME)
 # Model Classes (must be defined at global scope for Modal)
 # ---------------------------------------------------------------------------
 
-# Create a Modal class for each model
-# Each model gets its own container that scales independently
-# NOTE: Must be at global scope - Modal requires classes with @modal.method() 
-# decorators to be defined at module level, not inside functions
-MODEL_REGISTRY = {}
-
-for model_id, model_config in MODEL_CONFIG.models.items():
-    # Create a unique class name for this model
-    class_name = f"Model_{model_id.replace('/', '_').replace('-', '_').replace('.', '_')}"
+class BaseModel:
+    """Base class for vLLM model servers with shared functionality."""
     
-    # Use exec() to create the class definition at global scope
-    # This ensures Modal can see the @modal.method() decorators
-    # Store config values as class variables (can't serialize Pydantic model directly)
-    model_id_val = model_id
-    gpu_type_val = model_config.gpu_type
-    max_model_len_val = model_config.max_model_len
-    
-    class_code = f'''
-class {class_name}:
-    """vLLM model server for {model_id}."""
-    
-    _model_id = {repr(model_id_val)}
-    _gpu_type = {repr(gpu_type_val)}
-    _max_model_len = {repr(max_model_len_val)}
+    # These will be overridden by subclasses
+    _model_id: str
+    _gpu_type: str
+    _max_model_len: int
+    _quantization: str | None
+    _gpu_memory_utilization: float
+    _enforce_eager: bool
     
     @modal.enter()
     def load_model(self):
         """Load model once when container starts (cached across requests)."""
-        from vllm import LLM, SamplingParams
+        from vllm import LLM, SamplingParams  # type: ignore
         
-        print(f"Loading model: {{self._model_id}}")
-        print(f"Config: GPU={{self._gpu_type}}, MaxLen={{self._max_model_len}}")
+        print(f"Loading model: {self._model_id}")
+        print(f"Config: GPU={self._gpu_type}, MaxLen={self._max_model_len}, Quantization={self._quantization}, GPUUtil={self._gpu_memory_utilization}")
         
-        self.llm = LLM(
-            model=self._model_id,
-            max_model_len=self._max_model_len,
-            trust_remote_code=True,
-        )
+        # Build LLM kwargs
+        llm_kwargs = {
+            "model": self._model_id,
+            "max_model_len": self._max_model_len,
+            "trust_remote_code": True,
+            "gpu_memory_utilization": self._gpu_memory_utilization,
+        }
+        
+        # Add quantization if specified
+        if self._quantization:
+            llm_kwargs["quantization"] = self._quantization
+        
+        # Add enforce_eager if specified (saves memory)
+        if self._enforce_eager:
+            llm_kwargs["enforce_eager"] = True
+        
+        self.llm = LLM(**llm_kwargs)
         self.default_sampling = SamplingParams(
             temperature=0.7,
             top_p=0.9,
@@ -106,14 +104,14 @@ class {class_name}:
             max_tokens=max_tokens,
         )
         outputs = self.llm.generate([prompt], sampling)
-        return {{
-            "choices": [{{
-                "message": {{
+        return {
+            "choices": [{
+                "message": {
                     "role": "assistant",
                     "content": outputs[0].outputs[0].text
-                }}
-            }}]
-        }}
+                }
+            }]
+        }
     
     @modal.method()
     def chat_stream(self, messages: list[dict], max_tokens: int = 1024, temperature: float = 0.7):
@@ -127,7 +125,7 @@ class {class_name}:
             
             # Format messages for the model
             prompt = self._format_messages(messages)
-            logger.debug(f"chat_stream: Formatted prompt length: {{len(prompt)}}")
+            logger.debug(f"chat_stream: Formatted prompt length: {len(prompt)}")
             
             if not prompt or not prompt.strip():
                 raise ValueError("Formatted prompt is empty")
@@ -163,13 +161,13 @@ class {class_name}:
             if not chunks and final_text:
                 chunks = [final_text]
             
-            logger.debug(f"chat_stream: Generated {{len(chunks)}} chunks from text of length {{len(final_text)}}")
+            logger.debug(f"chat_stream: Generated {len(chunks)} chunks from text of length {len(final_text)}")
             
             return chunks
             
         except Exception as e:
-            logger.error(f"chat_stream: Error in chat_stream method: {{str(e)}}")
-            logger.error(f"chat_stream: Traceback: {{traceback.format_exc()}}")
+            logger.error(f"chat_stream: Error in chat_stream method: {str(e)}")
+            logger.error(f"chat_stream: Traceback: {traceback.format_exc()}")
             raise
     
     def _format_messages(self, messages: list[dict]) -> str:
@@ -179,19 +177,38 @@ class {class_name}:
             role = msg["role"]
             content = msg["content"]
             if role == "system":
-                formatted += f"[INST] {{content}} [/INST]\\n"
+                formatted += f"[INST] {content} [/INST]\n"
             elif role == "user":
-                formatted += f"[INST] {{content}} [/INST]\\n"
+                formatted += f"[INST] {content} [/INST]\n"
             elif role == "assistant":
-                formatted += f"{{content}}\\n"
+                formatted += f"{content}\n"
         return formatted
-'''
+
+
+# Create a Modal class for each model
+# Each model gets its own container that scales independently
+# NOTE: Classes must be defined at module level for Modal to see @modal.method() decorators
+MODEL_REGISTRY = {}
+
+for model_id, model_config in MODEL_CONFIG.models.items():
+    # Create a unique class name for this model
+    class_name = f"Model_{model_id.replace('/', '_').replace('-', '_').replace('.', '_')}"
     
-    # Execute the class definition at global scope
-    exec(class_code, globals())
-    
-    # Get the class we just created
-    ModelClass = globals()[class_name]
+    # Create a subclass of BaseModel with model-specific configuration
+    # This is done at module level, so Modal can see the decorators
+    ModelClass = type(
+        class_name,
+        (BaseModel,),
+        {
+            "_model_id": model_id,
+            "_gpu_type": model_config.gpu_type,
+            "_max_model_len": model_config.max_model_len,
+            "_quantization": model_config.quantization,
+            "_gpu_memory_utilization": model_config.gpu_memory_utilization,
+            "_enforce_eager": model_config.enforce_eager,
+            "__doc__": f"vLLM model server for {model_id}.",
+        }
+    )
     
     # Apply Modal decorator with model-specific settings
     ModalModel = app.cls(
