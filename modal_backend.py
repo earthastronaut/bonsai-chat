@@ -13,10 +13,10 @@ import modal  # type: ignore
 from modal import asgi_app  # type: ignore
 import logging
 
-from src.config import APP_NAME, MAX_CONTAINERS, LOG_LEVEL
-from src.images import api_image
+from src.config import APP_NAME, MAX_CONTAINERS, LOG_LEVEL, MODEL_REGISTRY as MODEL_CONFIG
+from src.images import api_image, vllm_image
 from src.api import create_app
-from src.model_registry import get_model_registry
+from src.model import create_model_class
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -33,7 +33,24 @@ app = modal.App(APP_NAME)
 
 # Create a Modal class for each model
 # Each model gets its own container that scales independently
-MODEL_REGISTRY = get_model_registry(app)
+# NOTE: Must be at global scope - Modal requires app.cls() to be called at module level
+MODEL_REGISTRY = {}
+
+for model_id, model_config in MODEL_CONFIG.models.items():
+    # Create a Model class for this specific model
+    ModelClass = create_model_class(model_id)
+    
+    # Apply Modal decorator with model-specific settings
+    ModalModel = app.cls(
+        gpu=model_config.gpu_type,
+        image=vllm_image,
+        scaledown_window=model_config.container_idle_timeout,
+        # secrets=[modal.Secret.from_name("huggingface")],  # Optional: only needed for private/gated models
+        max_containers=model_config.max_containers,
+    )(ModelClass)
+    
+    # Store in registry for routing
+    MODEL_REGISTRY[model_id] = ModalModel
 
 # ---------------------------------------------------------------------------
 # OpenAI-Compatible API (for Open WebUI)
