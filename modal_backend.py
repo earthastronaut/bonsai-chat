@@ -12,11 +12,11 @@ import json
 import modal  # type: ignore
 from modal import asgi_app  # type: ignore
 import logging
+import traceback
 
 from src.config import APP_NAME, MAX_CONTAINERS, LOG_LEVEL, MODEL_REGISTRY as MODEL_CONFIG
 from src.images import api_image, vllm_image
 from src.api import create_app
-from src.model import create_model_class
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -31,14 +31,167 @@ logging.basicConfig(
 
 app = modal.App(APP_NAME)
 
+
+# ---------------------------------------------------------------------------
+# Model Classes (must be defined at global scope for Modal)
+# ---------------------------------------------------------------------------
+
 # Create a Modal class for each model
 # Each model gets its own container that scales independently
-# NOTE: Must be at global scope - Modal requires app.cls() to be called at module level
+# NOTE: Must be at global scope - Modal requires classes with @modal.method() 
+# decorators to be defined at module level, not inside functions
 MODEL_REGISTRY = {}
 
 for model_id, model_config in MODEL_CONFIG.models.items():
-    # Create a Model class for this specific model
-    ModelClass = create_model_class(model_id)
+    # Create a unique class name for this model
+    class_name = f"Model_{model_id.replace('/', '_').replace('-', '_').replace('.', '_')}"
+    
+    # Use exec() to create the class definition at global scope
+    # This ensures Modal can see the @modal.method() decorators
+    # Store config values as class variables (can't serialize Pydantic model directly)
+    model_id_val = model_id
+    gpu_type_val = model_config.gpu_type
+    max_model_len_val = model_config.max_model_len
+    
+    class_code = f'''
+class {class_name}:
+    """vLLM model server for {model_id}."""
+    
+    _model_id = {repr(model_id_val)}
+    _gpu_type = {repr(gpu_type_val)}
+    _max_model_len = {repr(max_model_len_val)}
+    
+    @modal.enter()
+    def load_model(self):
+        """Load model once when container starts (cached across requests)."""
+        from vllm import LLM, SamplingParams
+        
+        print(f"Loading model: {{self._model_id}}")
+        print(f"Config: GPU={{self._gpu_type}}, MaxLen={{self._max_model_len}}")
+        
+        self.llm = LLM(
+            model=self._model_id,
+            max_model_len=self._max_model_len,
+            trust_remote_code=True,
+        )
+        self.default_sampling = SamplingParams(
+            temperature=0.7,
+            top_p=0.9,
+            max_tokens=1024,
+        )
+        print("Model loaded!")
+    
+    @modal.method()
+    def generate(self, prompt: str, max_tokens: int = 1024, temperature: float = 0.7):
+        """Generate completion for a prompt."""
+        from vllm import SamplingParams
+        
+        sampling = SamplingParams(
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        outputs = self.llm.generate([prompt], sampling)
+        return outputs[0].outputs[0].text
+    
+    @modal.method()
+    def chat(self, messages: list[dict], max_tokens: int = 1024, temperature: float = 0.7):
+        """Chat completion (OpenAI format)."""
+        from vllm import SamplingParams
+        
+        # Format messages for the model
+        prompt = self._format_messages(messages)
+        
+        sampling = SamplingParams(
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        outputs = self.llm.generate([prompt], sampling)
+        return {{
+            "choices": [{{
+                "message": {{
+                    "role": "assistant",
+                    "content": outputs[0].outputs[0].text
+                }}
+            }}]
+        }}
+    
+    @modal.method()
+    def chat_stream(self, messages: list[dict], max_tokens: int = 1024, temperature: float = 0.7):
+        """Stream chat completion (OpenAI format). Returns list of text deltas."""
+        from vllm import SamplingParams
+        
+        try:
+            # Validate input
+            if not messages or not isinstance(messages, list):
+                raise ValueError("messages must be a non-empty list")
+            
+            # Format messages for the model
+            prompt = self._format_messages(messages)
+            logger.debug(f"chat_stream: Formatted prompt length: {{len(prompt)}}")
+            
+            if not prompt or not prompt.strip():
+                raise ValueError("Formatted prompt is empty")
+            
+            sampling = SamplingParams(
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            
+            logger.debug("chat_stream: Starting vLLM generation")
+            
+            request_outputs = self.llm.generate([prompt], sampling, use_tqdm=False)
+            
+            if not request_outputs:
+                raise ValueError("vLLM returned empty outputs")
+            
+            request_output = request_outputs[0]
+            if not hasattr(request_output, 'outputs') or not request_output.outputs:
+                raise ValueError("RequestOutput has no outputs")
+            
+            # Get the final generated text
+            final_text = request_output.outputs[0].text
+            
+            # Simulate streaming by chunking the text into smaller pieces
+            chunk_size = 10  # Characters per chunk
+            chunks = []
+            for i in range(0, len(final_text), chunk_size):
+                chunk = final_text[i:i + chunk_size]
+                if chunk:
+                    chunks.append(chunk)
+            
+            # If text is very short, return it as a single chunk
+            if not chunks and final_text:
+                chunks = [final_text]
+            
+            logger.debug(f"chat_stream: Generated {{len(chunks)}} chunks from text of length {{len(final_text)}}")
+            
+            return chunks
+            
+        except Exception as e:
+            logger.error(f"chat_stream: Error in chat_stream method: {{str(e)}}")
+            logger.error(f"chat_stream: Traceback: {{traceback.format_exc()}}")
+            raise
+    
+    def _format_messages(self, messages: list[dict]) -> str:
+        """Format chat messages for Mistral-style models."""
+        formatted = ""
+        for msg in messages:
+            role = msg["role"]
+            content = msg["content"]
+            if role == "system":
+                formatted += f"[INST] {{content}} [/INST]\\n"
+            elif role == "user":
+                formatted += f"[INST] {{content}} [/INST]\\n"
+            elif role == "assistant":
+                formatted += f"{{content}}\\n"
+        return formatted
+'''
+    
+    # Execute the class definition at global scope
+    exec(class_code, globals())
+    
+    # Get the class we just created
+    ModelClass = globals()[class_name]
     
     # Apply Modal decorator with model-specific settings
     ModalModel = app.cls(
