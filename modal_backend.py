@@ -11,9 +11,9 @@ so all modules in src/ will be packaged and available at runtime.
 import modal
 from modal import asgi_app
 
-from src.config import APP_NAME, MAX_CONTAINERS, GPU_TYPE, CONTAINER_IDLE_TIMEOUT
+from src.config import APP_NAME, MAX_CONTAINERS, AVAILABLE_MODELS, DEFAULT_MODEL_ID
 from src.images import api_image, vllm_image
-from src.model import Model
+from src.model import create_model_class
 from src.api import create_app
 
 # ---------------------------------------------------------------------------
@@ -22,14 +22,25 @@ from src.api import create_app
 
 app = modal.App(APP_NAME)
 
-# Apply Modal decorator to Model class
-Model = app.cls(
-    gpu=GPU_TYPE,
-    image=vllm_image,
-    scaledown_window=CONTAINER_IDLE_TIMEOUT,
-    # secrets=[modal.Secret.from_name("huggingface")],  # Optional: only needed for private/gated models
-    max_containers=MAX_CONTAINERS,
-)(Model)
+# Create a Modal class for each model
+# Each model gets its own container that scales independently
+MODEL_REGISTRY = {}
+
+for model_id, model_config in AVAILABLE_MODELS.items():
+    # Create a Model class for this specific model
+    ModelClass = create_model_class(model_id)
+    
+    # Apply Modal decorator with model-specific settings
+    ModalModel = app.cls(
+        gpu=model_config.gpu_type,
+        image=vllm_image,
+        scaledown_window=model_config.container_idle_timeout,
+        # secrets=[modal.Secret.from_name("huggingface")],  # Optional: only needed for private/gated models
+        max_containers=MAX_CONTAINERS,
+    )(ModelClass)
+    
+    # Store in registry for routing
+    MODEL_REGISTRY[model_id] = ModalModel
 
 # ---------------------------------------------------------------------------
 # OpenAI-Compatible API (for Open WebUI)
@@ -43,7 +54,7 @@ Model = app.cls(
 @asgi_app()
 def api():
     """OpenAI-compatible API endpoint."""
-    return create_app(Model)
+    return create_app(MODEL_REGISTRY)
 
 
 # ---------------------------------------------------------------------------
@@ -53,7 +64,9 @@ def api():
 @app.local_entrypoint()
 def main():
     """Test the model locally."""
-    model = Model()
+    # Use default model for testing
+    ModelClass = MODEL_REGISTRY[DEFAULT_MODEL_ID]
+    model = ModelClass()
     
     # Test chat
     messages = [

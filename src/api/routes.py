@@ -12,13 +12,22 @@ from fastapi.responses import StreamingResponse
 
 from .models import ChatRequest, CompletionRequest
 from .auth import get_api_key, verify_auth
-from ..config import MODEL_ID
+from ..config import AVAILABLE_MODELS
 
 logger = logging.getLogger("llm-api")
 
 
-def setup_routes(app, Model):
+def setup_routes(app, model_registry):
     """Setup API routes."""
+    
+    def get_model(model_id: str):
+        """Get the Modal model class for a given model_id."""
+        if model_id not in model_registry:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Model '{model_id}' not found. Available models: {', '.join(model_registry.keys())}"
+            )
+        return model_registry[model_id]
     
     @app.get("/v1/models")
     async def list_models():
@@ -27,12 +36,15 @@ def setup_routes(app, Model):
         try:
             response = {
                 "object": "list",
-                "data": [{
-                    "id": MODEL_ID,
-                    "object": "model",
-                    "created": int(time.time()),
-                    "owned_by": "local",
-                }]
+                "data": [
+                    {
+                        "id": model_id,
+                        "object": "model",
+                        "created": int(time.time()),
+                        "owned_by": "local",
+                    }
+                    for model_id in model_registry.keys()
+                ]
             }
             logger.info(f"GET /v1/models - Success: {len(response['data'])} model(s) returned")
             return response
@@ -67,8 +79,16 @@ def setup_routes(app, Model):
         # Auth check
         verify_auth(authorization, api_key, completion_id)
         
+        # Validate model
+        if request.model not in model_registry:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Model '{request.model}' not found. Available models: {', '.join(model_registry.keys())}"
+            )
+        
         try:
-            model = Model()
+            ModelClass = get_model(request.model)
+            model = ModelClass()
             messages = [{"role": m.role, "content": m.content} for m in request.messages]
             
             if request.stream:
@@ -258,8 +278,16 @@ def setup_routes(app, Model):
         # Auth check
         verify_auth(authorization, api_key, completion_id)
         
+        # Validate model
+        if request.model not in model_registry:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Model '{request.model}' not found. Available models: {', '.join(model_registry.keys())}"
+            )
+        
         try:
-            model = Model()
+            ModelClass = get_model(request.model)
+            model = ModelClass()
             model_call_start = time.time()
             logger.info(f"Request {completion_id} - Calling model.generate.remote()")
             

@@ -15,12 +15,12 @@ logging.basicConfig(
 )
 
 
-def create_app(Model):
+def create_app(model_registry):
     """
     Create and configure FastAPI application.
     
     Args:
-        Model: The Modal Model class to use for inference
+        model_registry: Dictionary mapping model_id to Modal Model class
         
     Returns:
         FastAPI application instance
@@ -32,7 +32,7 @@ def create_app(Model):
     setup_request_logging(web_app)
     
     # Setup routes
-    setup_routes(web_app, Model)
+    setup_routes(web_app, model_registry)
     
     return web_app
 

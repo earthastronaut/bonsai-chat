@@ -3,7 +3,7 @@ Pydantic models for API requests and responses.
 """
 
 from pydantic import BaseModel
-from ..config import MODEL_ID
+from ..config import DEFAULT_MODEL_ID
 
 
 class ChatMessage(BaseModel):
@@ -14,7 +14,7 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     """Chat completion request model."""
-    model: str = MODEL_ID
+    model: str = DEFAULT_MODEL_ID
     messages: list[ChatMessage]
     max_tokens: int = 1024
     temperature: float = 0.7
@@ -23,7 +23,7 @@ class ChatRequest(BaseModel):
 
 class CompletionRequest(BaseModel):
     """Text completion request model."""
-    model: str = MODEL_ID
+    model: str = DEFAULT_MODEL_ID
     prompt: str
     max_tokens: int = 1024
     temperature: float = 0.7
