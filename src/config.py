@@ -9,7 +9,7 @@ MAX_CONTAINERS = 100
 CONTAINER_IDLE_TIMEOUT = 60 * 5  # Scale to zero after 5 minutes idle
 MAX_MODEL_LEN = 4096
 LOG_LEVEL = "DEBUG"
-DEFAULT_MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.3"
+DEFAULT_MODEL_ID = "openai/gpt-oss-120b"
 
 class ModelConfig(BaseModel):
     """Configuration for a single model."""
