@@ -1,18 +1,11 @@
 """
 FastAPI application setup.
 """
-
-import logging
 from fastapi import FastAPI
 
 from .middleware import setup_cors, setup_request_logging
 from .routes import setup_routes
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 
 
 def create_app(model_registry):

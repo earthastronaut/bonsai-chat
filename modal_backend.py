@@ -13,10 +13,10 @@ import modal  # type: ignore
 from modal import asgi_app  # type: ignore
 import logging
 
-from src.config import APP_NAME, MAX_CONTAINERS, LOG_LEVEL, AVAILABLE_MODELS, DEFAULT_MODEL_ID
-from src.images import api_image, vllm_image
-from src.model import create_model_class
+from src.config import APP_NAME, MAX_CONTAINERS, LOG_LEVEL
+from src.images import api_image
 from src.api import create_app
+from src.model_registry import get_model_registry
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -33,23 +33,7 @@ app = modal.App(APP_NAME)
 
 # Create a Modal class for each model
 # Each model gets its own container that scales independently
-MODEL_REGISTRY = {}
-
-for model_id, model_config in AVAILABLE_MODELS.items():
-    # Create a Model class for this specific model
-    ModelClass = create_model_class(model_id)
-    
-    # Apply Modal decorator with model-specific settings
-    ModalModel = app.cls(
-        gpu=model_config.gpu_type,
-        image=vllm_image,
-        scaledown_window=model_config.container_idle_timeout,
-        # secrets=[modal.Secret.from_name("huggingface")],  # Optional: only needed for private/gated models
-        max_containers=MAX_CONTAINERS,
-    )(ModelClass)
-    
-    # Store in registry for routing
-    MODEL_REGISTRY[model_id] = ModalModel
+MODEL_REGISTRY = get_model_registry(app)
 
 # ---------------------------------------------------------------------------
 # OpenAI-Compatible API (for Open WebUI)
@@ -75,9 +59,10 @@ def api():
 def main():
     """Test the model locally."""
     # Use default model for testing
-    ModelClass = MODEL_REGISTRY[DEFAULT_MODEL_ID]
+    default_model_id = list(MODEL_REGISTRY.keys())[0]
+    ModelClass = MODEL_REGISTRY[default_model_id]
     model = ModelClass()
-    
+
     # Test chat
     messages = [
         {"role": "user", "content": "What is the capital of France?"}

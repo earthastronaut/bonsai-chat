@@ -4,7 +4,7 @@ Model class for vLLM inference.
 
 import modal
 import traceback
-from .config import AVAILABLE_MODELS, DEFAULT_MODEL_ID
+from .config import MODEL_REGISTRY
 
 
 def create_model_class(model_id: str):
@@ -12,7 +12,7 @@ def create_model_class(model_id: str):
     Factory function to create a Model class for a specific model_id.
     Each model gets its own Modal class with its own container.
     """
-    model_config = AVAILABLE_MODELS.get(model_id)
+    model_config = MODEL_REGISTRY.models.get(model_id)
     if not model_config:
         raise ValueError(f"Model {model_id} not found in AVAILABLE_MODELS")
     

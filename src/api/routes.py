@@ -12,7 +12,6 @@ from fastapi.responses import StreamingResponse
 
 from .models import ChatRequest, CompletionRequest
 from .auth import get_api_key, verify_auth
-from ..config import AVAILABLE_MODELS
 
 logger = logging.getLogger("llm-api")
 
@@ -47,6 +46,7 @@ def setup_routes(app, model_registry):
                 ]
             }
             logger.info(f"GET /v1/models - Success: {len(response['data'])} model(s) returned")
+            logger.debug(f"GET /v1/models - Response: {json.dumps(response, indent=2)}")
             return response
         except Exception as e:
             logger.error(f"GET /v1/models - Error: {str(e)}")
