@@ -224,7 +224,7 @@ def register_model(model_id: str, model_config) -> type:
         gpu=model_config.gpu_type,
         image=vllm_image,
         scaledown_window=model_config.container_idle_timeout,
-        # secrets=[modal.Secret.from_name("huggingface")],  # Optional: only needed for private/gated models
+        secrets=[modal.Secret.from_name("huggingface")],  # For gated/private models on HuggingFace
         max_containers=model_config.max_containers,
     )(ModelClass)
     

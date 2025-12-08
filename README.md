@@ -35,6 +35,20 @@ modal setup  # One-time auth
 # Create API key secret (optional, for auth)
 modal secret create api-auth API_KEY=your-secret-key
 
+# Create HuggingFace token secret (optional, for gated models)
+# Only needed if you're using gated/private models
+modal secret create huggingface HF_TOKEN=hf_your_token_here
+```
+
+**Note:** For gated models, you'll need a HuggingFace token with **Read** permissions:
+1. Go to [HuggingFace Settings → Tokens](https://huggingface.co/settings/tokens)
+2. Click "New token"
+3. Name it (e.g., "Modal Model Access")
+4. Select **Read** role (sufficient for downloading models)
+5. Copy the token (starts with `hf_`)
+6. Accept terms for any gated models on their HuggingFace pages
+
+```bash
 # Deploy
 modal deploy -m src.app
 ```
@@ -211,6 +225,15 @@ MODEL_REGISTRY: ModelRegistry = ModelRegistry(
     },
 )
 ```
+
+**Note:** Some models may be gated and require a HuggingFace token:
+- Check the model's HuggingFace page for a "Request access" button
+- Accept the model's terms of use on HuggingFace
+- Create a HuggingFace token with **Read** permissions (see deployment section above)
+- Uncomment the `secrets` line in `src/app.py` if using gated models:
+  ```python
+  secrets=[modal.Secret.from_name("huggingface")],  # Uncomment for gated models
+  ```
 
 ### Adjust Scale-to-Zero Timeout
 
