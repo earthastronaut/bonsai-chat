@@ -66,7 +66,8 @@ MODEL_REGISTRY: ModelRegistry = ModelRegistry(
         "google/gemma-2-2b-it": ModelConfig(
             model_id="google/gemma-2-2b-it",
             gpu_type="T4",  # Small model can use T4
-            max_model_len=8192,
+            max_model_len=4992,  # Reduced from 8192 to fit T4 KV cache memory (error suggested 4992)
+            gpu_memory_utilization=0.9,
         ),
         "google/gemma-2-9b-it": ModelConfig(
             model_id="google/gemma-2-9b-it",
