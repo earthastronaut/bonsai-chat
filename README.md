@@ -46,7 +46,12 @@ modal secret create huggingface HF_TOKEN=hf_your_token_here
 3. Name it (e.g., "Modal Model Access")
 4. Select **Read** role (sufficient for downloading models)
 5. Copy the token (starts with `hf_`)
-6. Accept terms for any gated models on their HuggingFace pages
+6. **Accept terms for each gated model** you want to use:
+   - Visit the model's HuggingFace page (e.g., `https://huggingface.co/google/gemma-2-2b-it`)
+   - Look for a button that says "Agree and access repository" or "Request access"
+   - Click it and accept the model's terms of use
+   - You must do this for **each gated model** individually
+   - The token will only work for models whose terms you've accepted
 
 ```bash
 # Deploy
@@ -227,13 +232,10 @@ MODEL_REGISTRY: ModelRegistry = ModelRegistry(
 ```
 
 **Note:** Some models may be gated and require a HuggingFace token:
-- Check the model's HuggingFace page for a "Request access" button
-- Accept the model's terms of use on HuggingFace
-- Create a HuggingFace token with **Read** permissions (see deployment section above)
-- Uncomment the `secrets` line in `src/app.py` if using gated models:
-  ```python
-  secrets=[modal.Secret.from_name("huggingface")],  # Uncomment for gated models
-  ```
+- **Accept the model's terms**: Visit the model's HuggingFace page (e.g., `https://huggingface.co/google/gemma-2-2b-it`) and click "Agree and access repository" to accept the terms. You must do this for each gated model individually.
+- **Create a HuggingFace token**: Create a token with **Read** permissions (see deployment section above)
+- **Create the Modal secret**: Run `modal secret create huggingface HF_TOKEN=hf_your_token_here`
+- The `secrets` line in `src/app.py` is already configured for gated models (no changes needed)
 
 ### Adjust Scale-to-Zero Timeout
 
