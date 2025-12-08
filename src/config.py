@@ -9,7 +9,7 @@ MAX_CONTAINERS = 100
 CONTAINER_IDLE_TIMEOUT = 60 * 5  # Scale to zero after 5 minutes idle
 MAX_MODEL_LEN = 4096
 LOG_LEVEL = "DEBUG"
-DEFAULT_MODEL_ID = "openai/gpt-oss-120b"
+DEFAULT_MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.3"
 
 class ModelConfig(BaseModel):
     """Configuration for a single model."""
@@ -33,38 +33,28 @@ class ModelRegistry(BaseModel):
 
 
 # Available models configuration
+# Only includes verified, well-supported models that exist on HuggingFace
 MODEL_REGISTRY: ModelRegistry = ModelRegistry(
     models={
+        "openai/gpt-oss-20b": ModelConfig(
+            model_id="openai/gpt-oss-20b",
+            gpu_type="A100-40GB",  # Medium-large model needs A100
+            max_model_len=8192,
+        ),        
+        # OpenAI Open Models
         "openai/gpt-oss-120b": ModelConfig(
             model_id="openai/gpt-oss-120b",
-            gpu_type="A100-80GB",  # Large model needs A100
+            gpu_type="A100-80GB",  # Very large model needs A100-80GB
             max_model_len=8192,
+            gpu_memory_utilization=0.85,
+            enforce_eager=True,
         ),
-        "Qwen/Qwen3-235B-A22B": ModelConfig(
-            model_id="Qwen/Qwen3-235B-A22B",
-            gpu_type="A100-80GB",  # Very large model needs A100
-            max_model_len=8192,
-        ),
-        "Qwen/Qwen3-30B-A3B-T": ModelConfig(
-            model_id="Qwen/Qwen3-30B-A3B-T",
-            gpu_type="A10G",  # Medium model can use A10G
-            max_model_len=4096,
-        ),
-        "Qwen/Qwen3-1.7B": ModelConfig(
-            model_id="Qwen/Qwen3-1.7B",
-            gpu_type="T4",  # Small model can use T4
-            max_model_len=4096,
-        ),
-        "Qwen/Qwen3-4B-Thinking-2507": ModelConfig(
-            model_id="Qwen/Qwen3-4B-Thinking-2507",
-            gpu_type="T4",  # Small-medium model can use T4
-            max_model_len=4096,
-        ),
-        "mistralai/Mistral-7B-Instruct-v0.3": ModelConfig(
-            model_id="mistralai/Mistral-7B-Instruct-v0.3",
-            gpu_type="A10G",  # Small model can use A10G
-            max_model_len=4096,
-        ),
+        # # Mistral Models
+        # "mistralai/Mistral-7B-Instruct-v0.3": ModelConfig(
+        #     model_id="mistralai/Mistral-7B-Instruct-v0.3",
+        #     gpu_type="A10G",  # Well-supported model, works on A10G
+        #     max_model_len=4096,
+        # ),
         "mistralai/Mistral-Nemo-Base-2407": ModelConfig(
             model_id="mistralai/Mistral-Nemo-Base-2407",
             gpu_type="A100-40GB",  # Large model needs A100, or use quantization
@@ -72,6 +62,43 @@ MODEL_REGISTRY: ModelRegistry = ModelRegistry(
             gpu_memory_utilization=0.85,  # Reduce memory usage to avoid OOM
             enforce_eager=True,  # Disable CUDA graphs to save memory
         ),
+        # Google Gemma Models
+        "google/gemma-2-2b-it": ModelConfig(
+            model_id="google/gemma-2-2b-it",
+            gpu_type="T4",  # Small model can use T4
+            max_model_len=8192,
+        ),
+        "google/gemma-2-9b-it": ModelConfig(
+            model_id="google/gemma-2-9b-it",
+            gpu_type="A10G",  # Medium model can use A10G
+            max_model_len=8192,
+        ),
+        "google/gemma-2-27b-it": ModelConfig(
+            model_id="google/gemma-2-27b-it",
+            gpu_type="A100-40GB",  # Large model needs A100
+            max_model_len=8192,
+        ),
+        "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B": ModelConfig(
+            model_id="deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+            gpu_type="A100-40GB",  # Large model needs A100
+            max_model_len=8192,
+        ),
+        # # Qwen Models
+        # "Qwen/Qwen2.5-7B-Instruct": ModelConfig(
+        #     model_id="Qwen/Qwen2.5-7B-Instruct",
+        #     gpu_type="A10G",  # Medium model can use A10G
+        #     max_model_len=32768,  # Qwen2.5 supports long context
+        # ),
+        # "Qwen/Qwen2.5-14B-Instruct": ModelConfig(
+        #     model_id="Qwen/Qwen2.5-14B-Instruct",
+        #     gpu_type="A100-40GB",  # Large model needs A100
+        #     max_model_len=32768,
+        # ),
+        # "Qwen/Qwen2.5-32B-Instruct": ModelConfig(
+        #     model_id="Qwen/Qwen2.5-32B-Instruct",
+        #     gpu_type="A100-80GB",  # Very large model needs A100-80GB
+        #     max_model_len=32768,
+        # ),
     },
 )
 
