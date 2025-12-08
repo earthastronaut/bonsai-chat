@@ -31,6 +31,7 @@ vllm_image = (
     )
     .env({
         "HF_HUB_ENABLE_HF_TRANSFER": "1",
+        "HF_XET_HIGH_PERFORMANCE": "1",  # Faster HuggingFace downloads
         "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",  # Reduce memory fragmentation
         "CUDA_LAUNCH_BLOCKING": "0",  # Allow async CUDA operations
     })

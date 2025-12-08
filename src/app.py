@@ -28,6 +28,15 @@ logging.basicConfig(
 
 app = modal.App(APP_NAME)
 
+# ---------------------------------------------------------------------------
+# Persistent Volumes for Caching
+# ---------------------------------------------------------------------------
+
+# Cache volumes for faster model loading and reduced cold start times
+# These volumes persist model weights and vLLM compilation artifacts across container restarts
+hf_cache_vol = modal.Volume.from_name("huggingface-cache", create_if_missing=True)
+vllm_cache_vol = modal.Volume.from_name("vllm-cache", create_if_missing=True)
+
 
 # ---------------------------------------------------------------------------
 # Model Classes (must be defined at global scope for Modal)
@@ -47,12 +56,43 @@ class BaseModel:
     @modal.enter()
     def load_model(self):
         """Load model once when container starts (cached across requests)."""
+        import os
         from vllm import LLM, SamplingParams  # type: ignore
         
         print(f"Loading model: {self._model_id}")
         print(f"Config: GPU={self._gpu_type}, MaxLen={self._max_model_len}, Quantization={self._quantization}, GPUUtil={self._gpu_memory_utilization}")
         
+        # Check for HuggingFace token (required for gated models)
+        # Modal secrets automatically inject environment variables
+        hf_token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
+        if hf_token:
+            # Ensure both environment variable names are set (transformers uses either)
+            os.environ["HF_TOKEN"] = hf_token
+            os.environ["HUGGING_FACE_HUB_TOKEN"] = hf_token
+            print("✅ HuggingFace token found - can access gated models")
+        else:
+            print("⚠️  Warning: No HuggingFace token found. Gated models may fail.")
+            print("   To fix: modal secret create huggingface HF_TOKEN=hf_xxxxx")
+            print("   Also ensure you've accepted the model's terms at:")
+            print(f"   https://huggingface.co/{self._model_id}")
+        
+        # Set cache directories from mounted volumes
+        # HuggingFace cache for model weights
+        hf_cache_dir = "/cache/huggingface"
+        os.makedirs(hf_cache_dir, exist_ok=True)
+        os.environ["HF_HOME"] = hf_cache_dir
+        os.environ["HUGGINGFACE_HUB_CACHE"] = hf_cache_dir
+        os.environ["TRANSFORMERS_CACHE"] = hf_cache_dir
+        
+        # vLLM cache for compilation artifacts
+        vllm_cache_dir = "/cache/vllm"
+        os.makedirs(vllm_cache_dir, exist_ok=True)
+        os.environ["VLLM_CACHE_DIR"] = vllm_cache_dir
+        
+        print(f"Using cache directories: HF={hf_cache_dir}, vLLM={vllm_cache_dir}")
+        
         # Build LLM kwargs
+        # vLLM will automatically use the HuggingFace cache directories set via environment variables
         llm_kwargs = {
             "model": self._model_id,
             "max_model_len": self._max_model_len,
@@ -74,7 +114,13 @@ class BaseModel:
             top_p=0.9,
             max_tokens=1024,
         )
-        print("Model loaded!")
+        
+        # Commit volumes to persist cache after model loading
+        # This ensures model weights and compilation artifacts are saved for faster subsequent loads
+        hf_cache_vol.commit()
+        vllm_cache_vol.commit()
+        
+        print("Model loaded and cache committed!")
     
     @modal.method()
     def generate(self, prompt: str, max_tokens: int = 1024, temperature: float = 0.7):
@@ -220,12 +266,17 @@ def register_model(model_id: str, model_config) -> type:
     
     # Apply Modal decorator with model-specific settings
     # This creates a Modal class that will run in its own container
+    # Mount volumes for caching model weights and compilation artifacts
     ModalModel = app.cls(
         gpu=model_config.gpu_type,
         image=vllm_image,
         scaledown_window=model_config.container_idle_timeout,
         secrets=[modal.Secret.from_name("huggingface")],  # For gated/private models on HuggingFace
         max_containers=model_config.max_containers,
+        volumes={
+            "/cache/huggingface": hf_cache_vol,
+            "/cache/vllm": vllm_cache_vol,
+        },
     )(ModelClass)
     
     # Add to module namespace so Modal can discover the class
