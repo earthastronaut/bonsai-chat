@@ -41,6 +41,12 @@ def setup_routes(app, model_registry):
                         "object": "model",
                         "created": int(time.time()),
                         "owned_by": "local",
+                        "permissions": {
+                            "workspace_models_access": True,
+                            "workspace_knowledge_access": True,
+                            "workspace_prompts_access": True,
+                            "workspace_tools_access": True,
+                        }
                     }
                     for model_id in model_registry.keys()
                 ]
