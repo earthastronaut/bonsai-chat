@@ -115,6 +115,10 @@ class BaseModel:
             max_tokens=1024,
         )
         
+        # Store tokenizer reference for chat template formatting
+        # Access tokenizer through llm_engine which is available after LLM initialization
+        self.tokenizer = self.llm.llm_engine.tokenizer if hasattr(self.llm, 'llm_engine') and hasattr(self.llm.llm_engine, 'tokenizer') else None
+        
         # Commit volumes to persist cache after model loading
         # This ensures model weights and compilation artifacts are saved for faster subsequent loads
         hf_cache_vol.commit()
@@ -147,11 +151,14 @@ class BaseModel:
             max_tokens=max_tokens,
         )
         outputs = self.llm.generate([prompt], sampling)
+        # Clean the output to remove any instruction tags
+        raw_text = outputs[0].outputs[0].text
+        cleaned_text = self._clean_output(raw_text)
         return {
             "choices": [{
                 "message": {
                     "role": "assistant",
-                    "content": outputs[0].outputs[0].text
+                    "content": cleaned_text
                 }
             }]
         }
@@ -189,8 +196,9 @@ class BaseModel:
             if not hasattr(request_output, 'outputs') or not request_output.outputs:
                 raise ValueError("RequestOutput has no outputs")
             
-            # Get the final generated text
-            final_text = request_output.outputs[0].text
+            # Get the final generated text and clean it
+            raw_text = request_output.outputs[0].text
+            final_text = self._clean_output(raw_text)
             
             # Simulate streaming by chunking the text into smaller pieces
             chunk_size = 10  # Characters per chunk
@@ -213,18 +221,68 @@ class BaseModel:
             logger.error(f"chat_stream: Traceback: {traceback.format_exc()}")
             raise
     
+    def _clean_output(self, text: str) -> str:
+        """Remove instruction tags and other formatting artifacts from model output."""
+        if not text:
+            return text
+        
+        # Remove common instruction tags that might appear in output
+        # This handles cases where the model might echo the instruction format
+        import re
+        # Remove [INST]...[/INST] patterns
+        text = re.sub(r'\[INST\].*?\[/INST\]', '', text, flags=re.DOTALL)
+        # Remove standalone [INST] or [/INST] tags
+        text = re.sub(r'\[/?INST\]', '', text)
+        # Clean up extra whitespace
+        text = text.strip()
+        
+        return text
+    
     def _format_messages(self, messages: list[dict]) -> str:
-        """Format chat messages for Mistral-style models."""
-        formatted = ""
+        """Format chat messages using the model's tokenizer chat template."""
+        # Convert messages to the format expected by apply_chat_template
+        # The tokenizer expects a list of dicts with 'role' and 'content' keys
+        chat_messages = []
         for msg in messages:
             role = msg["role"]
             content = msg["content"]
+            # Include all messages (system, user, assistant) for proper chat template formatting
+            # The chat template will handle the formatting correctly
+            chat_messages.append({"role": role, "content": content})
+        
+        # Use the tokenizer's apply_chat_template to format messages correctly
+        # This ensures the model-specific chat template is used (e.g., Mistral, Llama, etc.)
+        if self.tokenizer and hasattr(self.tokenizer, 'apply_chat_template'):
+            try:
+                # apply_chat_template with tokenize=False returns a string
+                prompt = self.tokenizer.apply_chat_template(
+                    chat_messages,
+                    tokenize=False,
+                    add_generation_prompt=True
+                )
+                if isinstance(prompt, str):
+                    return prompt
+                else:
+                    # If it returns a list (tokenized), convert back to string
+                    logger.warning("Tokenizer returned tokenized output, converting to string")
+                    return self.tokenizer.decode(prompt) if isinstance(prompt, list) else str(prompt)
+            except Exception as e:
+                # Fallback: if apply_chat_template fails, use a simple format
+                logger.warning(f"Failed to apply chat template: {e}, using fallback format")
+        else:
+            logger.warning("Tokenizer not available, using fallback format")
+        
+        # Fallback: simple format without chat template
+        formatted = ""
+        for msg in chat_messages:
+            role = msg["role"]
+            content = msg["content"]
             if role == "system":
-                formatted += f"[INST] {content} [/INST]\n"
+                formatted += f"System: {content}\n\n"
             elif role == "user":
-                formatted += f"[INST] {content} [/INST]\n"
+                formatted += f"User: {content}\n\n"
             elif role == "assistant":
-                formatted += f"{content}\n"
+                formatted += f"Assistant: {content}\n\n"
         return formatted
 
 
