@@ -1,0 +1,15 @@
+# Nixpacks configuration for Railway
+# Environment variables for Open WebUI Speech-to-Text (Local Whisper)
+
+[variables]
+# Use local Whisper for speech-to-text (empty = local Whisper)
+AUDIO_STT_ENGINE = ""
+# Whisper model: tiny, base, small, medium, large (base is good balance)
+WHISPER_MODEL = "base"
+# Voice Activity Detection filter (recommended)
+WHISPER_VAD_FILTER = "true"
+# Language for transcription (ISO 639-1 code, e.g., "en" for English)
+WHISPER_LANGUAGE = "en"
+# Auto-update Whisper models (optional, set to false for stability)
+WHISPER_MODEL_AUTO_UPDATE = "false"
+

@@ -2,8 +2,7 @@
 # Deploy: Connect this repo to Railway and it will auto-deploy
 
 [build]
-# Use pre-built Open WebUI image
-dockerImage = "ghcr.io/open-webui/open-webui:main"
+# Railway automatically uses Dockerfile at root, which uses ghcr.io/open-webui/open-webui:main
 
 [deploy]
 # Container listens on port 8080
@@ -14,4 +13,5 @@ restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
 
 # Railway will set PORT automatically, Open WebUI uses 8080
-
+# 
+# Note: Environment variables for Whisper are configured in nixpacks.toml
